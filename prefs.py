@@ -52,7 +52,7 @@ class TL_PREFS(AddonPreferences):
     Folder: StringProperty(
         name="Coupling folder",
         default=getSettings()["folder"],
-        description="Define a folder where the Blender File is located (e.g., D:/TL_coupling)",
+        description="Define a folder where the Blender File is located (e.g., D:/Coupling)",
         subtype="DIR_PATH",
         update=updateFolder,
     )

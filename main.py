@@ -1,34 +1,33 @@
 """
-@description: Implements a minimial version of Modeling 3D optimized
-for use with Blender 5.0.1
+@description: Implements a minimial version of Blender Tangible Landscape 
+optimized for use with Blender 5.0.1
 
-Respects:
-camelCase for variables
-snake_case for functions
-
-@date 1/21/2026
+@date 5/06/2026
 @author(s): Everett Tucker
 """
 
 import os
-import math
 import bpy
 import bmesh
 from .settings import getSettings
 from bpy.props import StringProperty
 from mathutils import Vector
 from typing import Final, Tuple, Dict, List
+from .tree_geo_nodes import create_tree_geo_nodes
+from .poi_geo_nodes import create_poi_geo_nodes
 
 # Static File Paths
 WATCH_NAME: Final[str] = "Watch"
 TERRAIN_FILE: Final[str] = "terrain.tif"
+WATER_FILE: Final[str] = "water.tif"
+WATER_OBJECT: Final[str] = "water"
 TERRAIN_OBJECT: Final[str] = "terrain"
 TEXTURE_PATH: Final[str] = "texture.tif"
 VIEW_INCREASE_FACTOR: Final[int] = 5
 SUN_INCREASE_FACTOR: Final[int] = 2
 TEXTURE_MAPPING_SCALE: Final[int] = 3
 TERRAIN_ROUGHNESS: Final[float] = 0.8
-SLOPE_LIMIT: Final[float] = 0.85  # Limit for defining what counts as a side
+SLOPE_LIMIT: Final[float] = 0.4  # Limit for defining what counts as a side
 
 # Initial Parameters for the Sun
 SUN_ENERGY: Final[int] = 2
@@ -36,11 +35,12 @@ SUN_LOCATION: Final[Tuple[int, int, int]] = (0, 0, 1000)
 SUN_ORIENTATION: Final[Tuple[float, float, float]] = (0.9, 0.9, 0.9)
 SUN_SHADOW: Final[int] = 1000
 
-# TREE PARAMETERS
-MIN_TREE_SCALE: Final[float] = 0.95  # Relative scale variation
-MAX_TREE_SCALE: Final[float] = 1.05  # Relative scale variation
+# Tree Parameters
 TREE_COLLECTION_NAME: Final[str] = "tree_collection"
 
+# Point of Interest parameters
+POI_OBJECT_COLLECTION_NAME: Final[str] = "poi_object_collection"  # Collection for the POI models to be instanced
+POI_INSTANCE_COLLECTION_NAME: Final[str] = "poi_instance_collection"  # Collection for the POI meshes to instance on
 
 class Prefs:
     """
@@ -54,11 +54,15 @@ class Prefs:
         tlCoupling = tlSettings["folder"]
         self.watchFolder = os.path.join(tlCoupling, WATCH_NAME)
         self.terrainPath = os.path.join(self.watchFolder, TERRAIN_FILE)
+        self.waterPath = os.path.join(self.watchFolder, WATER_FILE)
         self.terrainTexturePath = os.path.join(
             tlCoupling, tlSettings["terrain"]["grass_texture_file"]
         )
         self.terrainSidesPath = os.path.join(
             tlCoupling, tlSettings["terrain"]["sides_texture_file"]
+        )
+        self.waterTexturePath = os.path.join(
+            tlCoupling, tlSettings["water"]["texture_file"]
         )
         self.worldTexturePath = os.path.join(
             tlCoupling, tlSettings["world"]["texture_file"]
@@ -67,15 +71,23 @@ class Prefs:
         # Coordinate Reference System and other configs
         self.CRS = "EPSG:" + tlSettings["CRS"]
         self.timer = tlSettings["timer"]
-        self.scale = tlSettings["treeScale"]
+        self.treeScale = tlSettings["treeScale"]
+        self.poiScale = tlSettings["poiScale"]
         self.treeDensity = tlSettings["treeDensity"]
 
         # Setting up tree models and textures
         self.trees = []
         for tree in tlSettings["trees"]:
             tree["model"] = os.path.join(tlCoupling, tree["model"])
-            tree["texture"] = os.path.join(tlCoupling, tree["texture"])
+            tree["input"] = os.path.join(tlCoupling, tree["input"])
             self.trees.append(tree)
+        
+        # Setting up points of interest and models
+        self.pois = []
+        for poi in tlSettings["pois"]:
+            poi["model"] = os.path.join(tlCoupling, poi["model"])
+            poi["input"] = os.path.join(tlCoupling, poi["input"])
+            self.pois.append(poi)
 
 
 class Adapt:
@@ -85,6 +97,7 @@ class Adapt:
     """
     def __init__(self):
         self.plane = TERRAIN_OBJECT
+        self.depressions = WATER_OBJECT
         self.texture = TEXTURE_PATH
         self.dimensions = None
         self.prefs = Prefs()
@@ -110,7 +123,7 @@ class Adapt:
         select_only(self.plane)
         bpy.ops.object.convert(target="MESH")
 
-        # Add sides to the terrain
+        # Add sides and materials to the terrain
         self.dimensions = bpy.data.objects[self.plane].dimensions
         add_side(self.plane, "terrain_sides_material")
         # Removing the terrain file
@@ -123,20 +136,20 @@ class Adapt:
             adjust_sun(terrain)
     
 
-    def trees(self, patchFiles: str, watchFolder: str) -> None:
+    def treeChange(self, patchFiles: List[str], watchFolder: str) -> None:
         # Grabbing the geometry node modifier
         terrain = bpy.data.objects.get(self.plane)
 
         # If the terrain has changed between tree updates
         geoMod = terrain.modifiers.get("tree_mod")
         if not geoMod:
-            geoMod = create_geo_nodes(terrain, self.prefs.treeDensity)
+            geoMod = create_tree_geo_nodes(terrain, self.prefs.treeDensity)
     
         for patchFile in patchFiles:
             path = os.path.join(watchFolder, patchFile)
 
             for i, tree in enumerate(self.prefs.trees):
-                if tree["texture"].endswith(patchFile):
+                if tree["input"].endswith(patchFile):
                     if bpy.data.images.get(patchFile):
                         bpy.data.images.remove(bpy.data.images[patchFile])
                     image = bpy.data.images.load(path)
@@ -146,6 +159,84 @@ class Adapt:
                     geoMod[f"Socket_{i + 2}"] = image
                     os.remove(path)
                     break
+        terrain.update_tag()  # Recalculating the geoNode modifier
+
+
+    def waterChange(self, path: str, CRS: str) -> None:
+        # Removing the old water object and importing a new one
+        remove_object(self.depressions)
+
+        try:
+            bpy.ops.importgis.georaster(
+                filepath=path,
+                importMode="DEM",
+                subdivision="mesh",
+                step=2,
+                rastCRS=CRS,
+            )
+        except Exception:
+            pass
+
+        # Converting to a real mesh
+        select_only(self.depressions)
+        bpy.ops.object.convert(target="MESH")
+
+        # Updating water texture
+        water = bpy.data.objects.get(self.depressions)
+        waterMaterial = bpy.data.materials.get("water_material")
+        water.data.materials.append(waterMaterial)
+
+        # Removing the water file
+        os.remove(path)
+    
+
+    def pointOfInterestChange(self, poiFiles: List[str], watchFolder: str):
+        terrain = bpy.data.objects.get(self.plane)
+        
+        # Possibly creating and then grabbing the instance collection
+        if POI_INSTANCE_COLLECTION_NAME in bpy.data.collections:
+            poiCollection = bpy.data.collections[POI_INSTANCE_COLLECTION_NAME]
+        else:
+            poiCollection = bpy.data.collections.new(POI_INSTANCE_COLLECTION_NAME)
+            bpy.context.scene.collection.children.link(poiCollection)
+
+        # If the terrain has changed between POI updates
+        geoMod = terrain.modifiers.get("poi_mod")
+        if not geoMod:
+            geoMod = create_poi_geo_nodes(terrain)
+
+        for poiFile in poiFiles:
+            path = os.path.join(watchFolder, poiFile)
+
+            for poi in self.prefs.pois:
+                if poi["input"].endswith(poiFile):
+                    # Trimming off the path and file extension
+                    poiName = poi["input"][poi["input"].rfind('/')+1:poi["input"].rfind('.')]
+                    print(f"Importing POI with name: {poiName}")
+
+                    # Unlinking and removing old objects before import
+                    if poiName in poiCollection.objects:
+                        poiCollection.objects.unlink(bpy.data.objects.get(poiName))
+                        remove_object(poiName)
+
+                    # Importing the POI points as a shapefile
+                    bpy.ops.importgis.shapefile(
+                        "EXEC_DEFAULT",                
+                        filepath=path,
+                        shpCRS=self.prefs.CRS,
+                        elevSource="GEOM",  # Change this if our shapefiles have no height
+                        separateObjects=False,
+                    )
+
+                    # Adding the POI to the correct collection
+                    select_only(poiName)
+                    bpy.ops.object.convert(target="MESH")
+                    poiObj = bpy.data.objects.get(poiName)
+                    poiCollection.objects.link(poiObj)
+
+                    # Removing the poi file
+                    os.remove(path)
+
         terrain.update_tag()  # Recalculating the geoNode modifier
 
 
@@ -173,13 +264,25 @@ class ModalTimerOperator(bpy.types.Operator):
                     if TERRAIN_FILE in fileList:
                         self.adapt.terrainChange(self.prefs.terrainPath, self.prefs.CRS)
                     
+                    # Water Update
+                    if WATER_FILE in fileList:
+                        self.adapt.waterChange(self.prefs.waterPath, self.prefs.CRS)
+                    
                     # Trees update
                     patchFiles = []
                     for f in fileList:
-                        if f in [tree["texture"].split("/")[-1] for tree in self.prefs.trees]:
+                        if f in [tree["input"].split("/")[-1] for tree in self.prefs.trees]:
                             patchFiles.append(f)
                     if patchFiles:
-                        self.adapt.trees(patchFiles, self.prefs.watchFolder)
+                        self.adapt.treeChange(patchFiles, self.prefs.watchFolder)
+                    
+                    # POI update
+                    poiFiles = []
+                    for f in fileList:
+                        if f in [poi["input"].split("/")[-1] for poi in self.prefs.pois]:
+                            poiFiles.append(f)
+                    if poiFiles:
+                        self.adapt.pointOfInterestChange(poiFiles, self.prefs.watchFolder)
                 except RuntimeError as e:
                     print(f"Update failed: {str(e)}")
         
@@ -285,6 +388,13 @@ class TL_OT_Assets(bpy.types.Operator):
             sides=True,
         )
 
+        # Creating water
+        create_terrain_material(
+            name="water_material",
+            texturePath=prefs.waterTexturePath,
+            sides=True,
+        )
+
         create_world(name="TL_world", texturePath=prefs.worldTexturePath)
         bpy.context.scene.world = bpy.data.worlds.get("TL_world")
         bpy.context.space_data.shading.type = "RENDERED"
@@ -311,14 +421,25 @@ class TL_OT_Assets(bpy.types.Operator):
 
             # Creating tree objects and linking them to the collection
             for tree in prefs.trees:
-                load_tree_from_file(tree["model"], tree["name"], treeCollection, baseSize=prefs.scale)
-
+                load_tree_from_file(tree["model"], tree["name"], treeCollection, baseSize=prefs.treeScale)
+        
+        # Creating a collection for the points of interest
+        if POI_OBJECT_COLLECTION_NAME not in bpy.data.collections:
+            poiCollection = bpy.data.collections.new(POI_OBJECT_COLLECTION_NAME)
+            bpy.context.scene.collection.children.link(poiCollection)
+        
+        # Instantiate the models alphabetically so they remain in sorted order
+        for i, poi in enumerate(prefs.pois):
+            load_poi_from_file(poi["model"], f"POI{i} - {poi['name']}", poiCollection, baseSize=prefs.poiScale)
+        
+        # Creating the geometry node system for the trees and pois, if we can
         if TERRAIN_OBJECT in [obj.name for obj in bpy.data.objects]:
-            create_geo_nodes(bpy.data.objects.get(TERRAIN_OBJECT), prefs.treeDensity)
+            create_tree_geo_nodes(bpy.data.objects.get(TERRAIN_OBJECT), prefs.treeDensity)
+            create_poi_geo_nodes(bpy.data.objects.get(TERRAIN_OBJECT))
         else:
             # Delay creation of geo node modifier
             print("Warning: No Terrain")
-            print("Geometry nodes will be initialized later")
+            print("Geometry nodes will be initialized at initial update")
 
         return {"FINISHED"}
 
@@ -534,142 +655,23 @@ def load_tree_from_file(filepath: str, treeName: str, treeCollection: bpy.types.
     return treeObject.name
 
 
-def create_geo_nodes(terrain: bpy.types.Object, treeDensity: float) -> bpy.types.Modifier:
-    # Create node group if it doesn't exist
-    nodeGroup = bpy.data.node_groups.get("tree_geo_group")
-    if not nodeGroup:
-        nodeGroup = create_node_group(treeDensity)
+def load_poi_from_file(filepath: str, poiName: str, poiCollection: bpy.types.Collection, baseSize: float = 1.0) -> str:
+    bpy.ops.import_scene.gltf(filepath=filepath)  # Assuming the POI model is a .glb
 
-    geoMod = terrain.modifiers.new(name="tree_mod", type="NODES")
-    geoMod.node_group = nodeGroup
+    poiObject = bpy.context.active_object
+    poiObject.name = poiName
+    poiCollection.objects.link(poiObject)
 
-    return geoMod
-    
+    bpy.data.collections["Collection"].objects.unlink(poiObject)  # Unlinking from the main collection
 
-def create_node_group(treeDensity: float) -> bpy.types.NodeGroup:
-    print("Creating Node Group - Heavy Call!")
-    # The trees should already be in the tree_collection, so grab them
-    treeCollection = bpy.data.collections.get(TREE_COLLECTION_NAME)
-    treeObjNames = [obj.name for obj in treeCollection.objects]
-    
-    if not treeObjNames:
-        print("No trees to create node group!")
-        return None
+    height = poiObject.dimensions.z
+    if height > 0:
+        poiObject.scale = tuple([baseSize / height] * 3)
+        print(f"POI Object scale set to {poiObject.scale}")
+    poiObject.rotation_euler = (0, 0, 0)
+    poiObject.hide_set(True)
 
-    nodeGroup = bpy.data.node_groups.new("tree_geo_group", "GeometryNodeTree")
+    return poiObject.name
 
-    # Defining input interface
-    interface = nodeGroup.interface
-    interface.new_socket(
-        name="terrain",
-        in_out="INPUT",
-        socket_type="NodeSocketGeometry",
-    )
 
-    # Defining output socket
-    interface.new_socket(
-        name="Geometry",
-        in_out="OUTPUT",
-        socket_type="NodeSocketGeometry",
-    )
 
-    nodes = nodeGroup.nodes
-    links = nodeGroup.links
-
-    # Creating input and output node groups
-    groupInput = nodes.new("NodeGroupInput")
-    groupOutput = nodes.new("NodeGroupOutput")
-
-    # Creating inputs for the mask textures
-    for i in range(len(treeObjNames)):
-        interface.new_socket(
-            name=f"mask_{i}",
-            in_out="INPUT",
-            socket_type="NodeSocketImage",
-        )
-
-    # Named Attribute Node for Terrain UV Map
-    uvMapNode = nodes.new("GeometryNodeInputNamedAttribute")
-    uvMapNode.inputs[0].default_value = "demUVmap"
-    uvMapNode.data_type = "FLOAT_VECTOR"
-
-    # Randomizes the scale of the trees for realism
-    randomScale = nodes.new("FunctionNodeRandomValue")
-    randomScale.data_type = "FLOAT_VECTOR"
-    randomScale.inputs[0].default_value = [MIN_TREE_SCALE] * 3
-    randomScale.inputs[1].default_value = [MAX_TREE_SCALE] * 3
-
-    # Randomizes the rotation of the trees for realism
-    randomRot = nodes.new("FunctionNodeRandomValue")
-    randomRot.data_type = "FLOAT_VECTOR"
-    randomRot.inputs[0].default_value = (0, 0, 0)  # Min rotation
-    randomRot.inputs[1].default_value = (0, 0, 2 * math.pi)  # Max rotation
-
-    # Create Object Collection Node for all trees
-    collectionInfoNode = nodes.new("GeometryNodeCollectionInfo")
-    collectionInfoNode.inputs["Collection"].default_value = bpy.data.collections.get(TREE_COLLECTION_NAME)
-    collectionInfoNode.inputs["Separate Children"].default_value = True
-    collectionInfoNode.inputs["Reset Children"].default_value = False
-    collectionInfoNode.transform_space = "RELATIVE"
-
-    # Creating Density and Identity Masks for Trees
-    currentDensityOutput = None
-    currentIdentityOutput = None
-    for i in range(len(treeObjNames)):
-        treeTexture = nodes.new("GeometryNodeImageTexture")
-        treeTexture.interpolation = "Closest"
-        treeTexture.extension = "CLIP"
-        links.new(groupInput.outputs[f"mask_{i}"], treeTexture.inputs["Image"])
-        links.new(uvMapNode.outputs["Attribute"], treeTexture.inputs["Vector"])
-
-        tempDensityOutput = nodes.new("ShaderNodeMath")
-        tempDensityOutput.operation = "ADD"
-        links.new(treeTexture.outputs["Color"], tempDensityOutput.inputs[0])
-        tempIdentityOutput = nodes.new("ShaderNodeMath")
-        tempIdentityOutput.operation = "MULTIPLY"
-        links.new(treeTexture.outputs["Color"], tempIdentityOutput.inputs[0])
-        tempIdentityOutput.inputs[1].default_value = i
-
-        if i == 0:
-            tempDensityOutput.inputs[1].default_value = 0.0
-        else:
-            sumNode = nodes.new("ShaderNodeMath")
-            sumNode.operation = "ADD"
-            links.new(currentIdentityOutput.outputs["Value"], sumNode.inputs[0])
-            links.new(tempIdentityOutput.outputs["Value"], sumNode.inputs[1])  # Identity Mask
-            tempIdentityOutput = sumNode
-            links.new(currentDensityOutput.outputs["Value"], tempDensityOutput.inputs[1])  # Density Mask
-        
-        currentIdentityOutput = tempIdentityOutput
-        currentDensityOutput = tempDensityOutput
-    
-    # Adding a density scaler for the density mask
-    densityScaler = nodes.new("ShaderNodeMath")
-    densityScaler.operation = "MULTIPLY"
-    densityScaler.inputs[0].default_value = treeDensity
-    links.new(currentDensityOutput.outputs["Value"], densityScaler.inputs[1])
-
-    # Adding in the distribute node
-    distribute = nodes.new("GeometryNodeDistributePointsOnFaces")
-    distribute.distribute_method = "RANDOM"
-    links.new(densityScaler.outputs["Value"], distribute.inputs["Density"])
-    links.new(groupInput.outputs["terrain"], distribute.inputs["Mesh"])
-
-    # Adding in the instancer node
-    instancer = nodes.new("GeometryNodeInstanceOnPoints")
-    instancer.inputs["Pick Instance"].default_value = True
-    links.new(distribute.outputs["Points"], instancer.inputs["Points"])
-    links.new(currentIdentityOutput.outputs["Value"], instancer.inputs["Instance Index"])
-    links.new(collectionInfoNode.outputs["Instances"], instancer.inputs["Instance"])
-    links.new(randomRot.outputs["Value"], instancer.inputs["Rotation"])
-    links.new(randomScale.outputs["Value"], instancer.inputs["Scale"])
-
-    # Adding in the join geometry node
-    joinGeoNode = nodes.new("GeometryNodeJoinGeometry")
-    links.new(groupInput.outputs["terrain"], joinGeoNode.inputs["Geometry"])
-    links.new(instancer.outputs["Instances"], joinGeoNode.inputs["Geometry"])
-
-    # Linking join node to output and setting terrain
-    links.new(joinGeoNode.outputs[0], groupOutput.inputs[0])
-
-    return nodeGroup

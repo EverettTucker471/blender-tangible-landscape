@@ -34,15 +34,15 @@ bl_info = {
 
 
 from . import prefs
-from . import Modeling3D
+from . import main
 
 
 classes = (
-    Modeling3D.ModalTimerOperator,
-    Modeling3D.TL_OT_Assets,
-    Modeling3D.TL_PT_GUI,
-    Modeling3D.TL_OT_ClearTrees,
-    Modeling3D.MessageOperator,
+    main.ModalTimerOperator,
+    main.TL_OT_Assets,
+    main.TL_PT_GUI,
+    main.TL_OT_ClearTrees,
+    main.MessageOperator,
     prefs.TL_OT_PREFS_SHOW,
     prefs.TL_PREFS,
 )

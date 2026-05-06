@@ -19,10 +19,11 @@ class TL_OT_PREFS_SHOW(bpy.types.Operator):
     bl_label = "Preferences"
     bl_options = {"INTERNAL"}
 
-    def execute(self, context: bpy.types.Context):
+    def execute(self, context):
         addon_utils.modules_refresh()
         bpy.context.user_preferences.active_section = "ADDONS"
         bpy.data.window_managers["WinMan"].addon_search = bl_info["name"]
+        # bpy.ops.wm.addon_expand(module=PKG)
         mod = addon_utils.addons_fake_modules.get(PKG)
         mod.bl_info["show_expanded"] = True
         bpy.ops.screen.userpref_show("INVOKE_DEFAULT")
@@ -75,7 +76,7 @@ class TL_PREFS(AddonPreferences):
         name="Font color", subtype="COLOR", min=0, max=1, size=4, default=(0, 0, 0, 1)
     )
 
-    def draw(self, context: bpy.types.Context):
+    def draw(self, context):
 
         layout = self.layout
         # Basemaps

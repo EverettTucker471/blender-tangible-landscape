@@ -14,6 +14,7 @@ while pgrep -x "blender" > /dev/null; do
 done
 
 # Path to zip the file to, should be outside
+mkdir -p $COUPLING
 mkdir -p $COUPLING/zip
 mkdir -p $COUPLING/Watch
 rm -f $COUPLING/zip/*.zip

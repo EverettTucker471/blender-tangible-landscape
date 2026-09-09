@@ -23,7 +23,7 @@ cd $COUPLING
 zip -r "$ZIP_PATH" $REPO_NAME -x "*/.*" "*/__pycache__/*" "*.pyc" "reload/*" "scratch/*" "Watch/*" "zip/*"
 
 # Installing the addon and configuring
-blender --background --python "$REPO_NAME/reload/reinstall_addon.py" -- --addon_zip_path "$ZIP_PATH" --coupling_path "$COUPLING_DIR" --addon_name "$REPO_NAME"
+blender --background --python "./$REPO_NAME/reload/reinstall_addon.py" -- --addon_zip_path "$ZIP_PATH" --coupling_path "$COUPLING_DIR" --addon_name "$REPO_NAME"
 
 # Reopening blender 5.x, assuming it's sourced correctly
 blender

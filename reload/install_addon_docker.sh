@@ -2,7 +2,7 @@
 
 # The coupling directory, we assume the development repo is inside
 ADDON_NAME="Blender for Tangible Landscape"
-COUPLING_DIR="/coupling"
+COUPLING_DIR="tmp/tangible-landscape-install/coupling"
 REPO_NAME="blender-tangible-landscape"
 
 # quitting current blender window - make sure to save first

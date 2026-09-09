@@ -30,7 +30,7 @@ def main():
     # Install the fresh addon from the zip path
     bpy.ops.preferences.addon_install(filepath=args.addon_zip_path, enable_on_install=True)
 
-    # Configure the addon with the tl_coupling path
+    # Configure the addon with the coupling path
     prefs = bpy.context.preferences.addons[args.addon_name].preferences
     prefs.folder = args.coupling_path
     bpy.ops.wm.save_userpref()

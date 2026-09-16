@@ -26,3 +26,8 @@ zip -r "$ZIP_PATH" "$INSTALL_PATH/$REPO_NAME" -x "*/.*" "*/__pycache__/*" "*.pyc
 
 # Installing the addon and configuring
 blender --background --python "$INSTALL_PATH/$REPO_NAME/reload/reinstall_addon.py" -- --addon_zip_path "$ZIP_PATH" --coupling_path "$WATCH_DIR" --addon_name "$REPO_NAME"
+
+# Installing BlenderGIS
+cd $INSTALL_PATH
+curl -L -o blender_gis.zip https://github.com/domlysz/BlenderGIS/archive/refs/tags/2215.zip
+blender --background --python-expr "import bpy; bpy.ops.preferences.addon_install(overwrite=True, filepath='/tmp/tangible-landscape-install/blender_gis.zip'); bpy.ops.preferences.addon_enable(module='BlenderGIS'); bpy.ops.wm.save_userpref()"

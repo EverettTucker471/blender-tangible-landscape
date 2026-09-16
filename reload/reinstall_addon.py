@@ -9,6 +9,7 @@ Usage:
 
 import sys
 import bpy
+import addon_utils
 import argparse
 
 
@@ -28,7 +29,9 @@ def main():
     args = parser.parse_args(argv)
 
     # Install the fresh addon from the zip path
-    bpy.ops.preferences.addon_install(filepath=args.addon_zip_path, enable_on_install=True)
+    bpy.ops.preferences.addon_install(filepath=args.addon_zip_path, overwrite=True)
+    addon_utils.modules_refresh()
+    bpy.ops.preferences.addon_enable(module=args.addon_name)
 
     # Configure the addon with the coupling path
     prefs = bpy.context.preferences.addons[args.addon_name].preferences

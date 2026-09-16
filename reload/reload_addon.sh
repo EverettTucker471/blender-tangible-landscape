@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # The coupling directory, we assume the development repo is inside
-ADDON_NAME="Blender for Tangible Landscape"
-COUPLING_DIR="path/to/coupling/directory"
+# ADDON_NAME="Blender for Tangible Landscape"
+ADDON_NAME="blender-tangible-landscape-master"
+COUPLING_DIR="/home/everetttucker471/IGroup/TL_coupling"
 REPO_NAME="blender-tangible-landscape"
 
 # quitting current blender window - make sure to save first
@@ -14,11 +15,11 @@ while pgrep -x "blender" > /dev/null; do
 done
 
 # Path to zip the file to, should be outside
-mkdir -p $COUPLING/zip
-rm $COUPLING/zip/*.zip
-ZIP_PATH="$COUPLING/zip/blender-tangible-landscape-master.zip"
+mkdir -p $COUPLING_DIR/zip
+rm $COUPLING_DIR/zip/*.zip
+ZIP_PATH="$COUPLING_DIR/zip/blender-tangible-landscape-master.zip"
 
-cd $COUPLING
+cd $COUPLING_DIR
 zip -r "$ZIP_PATH" $REPO_NAME -x "*/.*" "*/__pycache__/*" "*.pyc" "reload/*" "scratch/*" "Watch/*" "zip/*"
 
 # Installing the addon and configuring

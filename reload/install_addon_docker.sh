@@ -6,7 +6,7 @@ COUPLING_DIR="/workspace/coupling"
 INSTALL_PATH="/tmp/tangible-landscape-install"
 WATCH_DIR=$COUPLING_DIR/Watch
 REPO_NAME="blender-tangible-landscape"
-ZIP_PATH="$COUPLING_DIR/zip/blender-tangible-landscape-master.zip"
+ZIP_PATH="$COUPLING_DIR/zip/blender_tangible_landscape.zip"
 
 # quitting current blender window - make sure to save first
 pkill blender

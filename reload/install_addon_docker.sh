@@ -6,7 +6,8 @@ COUPLING_DIR="/workspace/coupling"
 INSTALL_PATH="/tmp/tangible-landscape-install"
 WATCH_DIR=$COUPLING_DIR/Watch
 REPO_NAME="blender-tangible-landscape"
-ZIP_PATH="$COUPLING_DIR/zip/blender_tangible_landscape.zip"
+ADDON_NAME="blender_tangible_landscape"
+ZIP_PATH="$COUPLING_DIR/zip/$ADDON_NAME.zip"
 
 # quitting current blender window - make sure to save first
 pkill blender
@@ -25,7 +26,7 @@ cd $COUPLING_DIR
 zip -r "$ZIP_PATH" "$INSTALL_PATH/$REPO_NAME" -x "*/.*" "*/__pycache__/*" "*.pyc" "reload/*" "scratch/*" "Watch/*" "zip/*"
 
 # Installing the addon and configuring
-blender --background --python "$INSTALL_PATH/$REPO_NAME/reload/reinstall_addon.py" -- --addon_zip_path "$ZIP_PATH" --coupling_path "$WATCH_DIR" --addon_name "$REPO_NAME"
+blender --background --python "$INSTALL_PATH/$REPO_NAME/reload/reinstall_addon.py" -- --addon_zip_path "$ZIP_PATH" --coupling_path "$WATCH_DIR" --addon_name "$ADDON_NAME"
 
 # Installing BlenderGIS
 cd $INSTALL_PATH

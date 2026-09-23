@@ -27,7 +27,7 @@ zip -r "$ZIP_PATH" "$ADDON_NAME" -x "*/.*" "*/__pycache__/*" "*.pyc" "reload/*" 
 rm -rf "$ADDON_NAME"
 
 # Install Tangible Landscape
-blender --background --python "$INSTALL_PATH/$REPO_NAME/reload/reinstall_addon.py" -- \
+blender --background --python "$INSTALL_PATH/$REPO_NAME/reload/reinstall_tl_addon.py" -- \
     --addon_zip_path "$ZIP_PATH" \
     --coupling_path "$WATCH_DIR" \
     --addon_name "$ADDON_NAME"
@@ -37,4 +37,4 @@ cd "$INSTALL_PATH"
 curl -L -o blender_gis.zip https://github.com/domlysz/BlenderGIS/archive/refs/tags/2215.zip
 
 # Install BlenderGIS
-blender --background --python-expr "import bpy; bpy.ops.preferences.addon_install(overwrite=True, filepath='/tmp/tangible-landscape-install/blender_gis.zip'); bpy.ops.preferences.addon_enable(module='BlenderGIS'); bpy.ops.wm.save_userpref()"
+blender --background --python "$INSTALL_PATH/$REPO_NAME/reload/reinstall_bgis_addon.py"

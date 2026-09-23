@@ -2,10 +2,10 @@
 set -e
 
 ADDON_NAME="blender_tangible_landscape"
-COUPLING_DIR="/workspace/coupling"
 INSTALL_PATH="/tmp/tangible-landscape-install"
-WATCH_DIR="$COUPLING_DIR/Watch"
 REPO_NAME="blender-tangible-landscape"
+COUPLING_DIR="$INSTALL_PATH/$REPO_NAME"
+WATCH_DIR="$COUPLING_DIR/Watch"
 ZIP_PATH="$COUPLING_DIR/zip/$ADDON_NAME.zip"
 
 # Quitting current blender window - make sure to save first
@@ -29,7 +29,7 @@ rm -rf "$ADDON_NAME"
 # Install Tangible Landscape
 blender --background --python "$INSTALL_PATH/$REPO_NAME/reload/reinstall_tl_addon.py" -- \
     --addon_zip_path "$ZIP_PATH" \
-    --coupling_path "$WATCH_DIR" \
+    --coupling_path "$COUPLING_DIR" \
     --addon_name "$ADDON_NAME"
 
 # Download BlenderGIS

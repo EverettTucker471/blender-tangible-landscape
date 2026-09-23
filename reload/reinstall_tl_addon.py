@@ -35,7 +35,7 @@ def main():
 
     # Configure the addon with the coupling path
     prefs = bpy.context.preferences.addons[args.addon_name].preferences
-    prefs.folder = args.coupling_path
+    prefs.Folder = args.coupling_path
     bpy.ops.wm.save_userpref()
     print(f"{args.addon_name} Successfully Reloaded")
 
